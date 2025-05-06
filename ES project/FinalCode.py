@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
+from scipy.stats import chi2
 import re
 import os
 
@@ -183,9 +184,33 @@ def analyze_team_performance(df):
     plt.tight_layout()
     plt.show()
 
+def compute_tolerance_interval(data, coverage=0.95, conf=0.95):
+    """
+    Returns (lower_bound, upper_bound, k_factor) for a two-sided normal tolerance interval.
+    
+    Parameters:
+    - data: Array-like object containing the data
+    - coverage: Desired coverage probability (default: 0.95)
+    - conf: Confidence level (default: 0.95)
+    
+    Returns:
+    - Tuple of (lower_bound, upper_bound, k_factor)
+    """
+    n = len(data)
+    mean = data.mean()
+    std = data.std(ddof=1)
+    # chi-square quantile for df = n-1
+    chi2_val = chi2.ppf(conf, df=n-1)
+    # k factor (see statistical tables or NIST formula)
+    k = np.sqrt((n-1) * chi2_val / (n * (n-1)))
+    lower = mean - k * std
+    upper = mean + k * std
+    return lower, upper, k
+
 def perform_statistical_analysis(df_runs):
     """
-    Performs statistical analysis including confidence intervals and hypothesis testing.
+    Performs statistical analysis including confidence intervals, hypothesis testing,
+    and tolerance intervals for each format.
     
     Parameters:
     - df_runs: Dataframe containing runs-based match data
@@ -202,8 +227,36 @@ def perform_statistical_analysis(df_runs):
     ci_mean = (train_mean - t_crit*train_std/np.sqrt(n), 
               train_mean + t_crit*train_std/np.sqrt(n))
     
-    print("\n=== Statistical Intervals ===")
+    print("\n=== Overall Statistical Intervals ===")
     print(f"95% Confidence Interval (Mean): ({ci_mean[0]:.2f}, {ci_mean[1]:.2f})")
+    
+    # Compute overall tolerance interval
+    ti_lower, ti_upper, k = compute_tolerance_interval(train_data['Margin'])
+    coverage_frac = ((test_data['Margin'] >= ti_lower) & 
+                    (test_data['Margin'] <= ti_upper)).mean() * 100
+    
+    print("\n=== Overall Tolerance Interval (95/95) ===")
+    print(f"k-factor: {k:.4f}")
+    print(f"Interval: ({ti_lower:.2f}, {ti_upper:.2f}) runs")
+    print(f"Test-set coverage: {coverage_frac:.2f}%")
+    
+    # Format-specific analysis
+    print("\n=== Format-Specific Tolerance Intervals (95/95) ===")
+    for format_name in df_runs['Format'].unique():
+        format_train = train_data[train_data['Format'] == format_name]
+        format_test = test_data[test_data['Format'] == format_name]
+        
+        if len(format_train) > 0 and len(format_test) > 0:
+            # Compute format-specific tolerance interval
+            ti_lower, ti_upper, k = compute_tolerance_interval(format_train['Margin'])
+            coverage_frac = ((format_test['Margin'] >= ti_lower) & 
+                           (format_test['Margin'] <= ti_upper)).mean() * 100
+            
+            print(f"\n{format_name}:")
+            print(f"k-factor: {k:.4f}")
+            print(f"Interval: ({ti_lower:.2f}, {ti_upper:.2f}) runs")
+            print(f"Test-set coverage: {coverage_frac:.2f}%")
+            print(f"Sample size (train/test): {len(format_train)}/{len(format_test)}")
     
     # Perform home advantage analysis
     if 'Ground' in df_runs.columns:
