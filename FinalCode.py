@@ -19,7 +19,10 @@ plt.switch_backend('TkAgg')
 def load_and_preprocess_data(file_path):
     """
     Loads and preprocesses the cricket dataset.
-    
+    pandas
+numpy
+matplotlib
+scipy
     Parameters:
     - file_path: Path to the CSV file containing cricket match data
     
